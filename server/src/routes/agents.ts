@@ -1624,6 +1624,15 @@ export function agentRoutes(
       };
     }
 
+    if (agent.permissions?.canAssignTasks === false) {
+      return {
+        canAssignTasks: false,
+        taskAssignSource: "none" as const,
+        membership,
+        grants,
+      };
+    }
+
     if (hasExplicitTaskAssignGrant) {
       return {
         canAssignTasks: true,
