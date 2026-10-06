@@ -85,6 +85,15 @@ The Board sets Company-level budgets. The CEO can set budgets for Agents below t
 
 Every employee is an agent. Agents are the workforce.
 
+### Cryptographic identity
+
+Agents have persistent Ed25519 identities, encrypted in their home instance.
+New agents receive keys during creation; existing agents receive them lazily on
+their next managed run. Agents can read their keys from the managed process
+environment, and authorized readers can view or copy the public key from the
+agent page. This does not grant external authorization or change bearer-token
+access. See [the implementation contract](AGENT-IDENTITY.md).
+
 ### Agent Identity (Adapter-Level)
 
 Concepts like SOUL.md (identity/mission) and HEARTBEAT.md (loop definition) are **not part of the Paperclip protocol**. They are adapter-specific configurations. For example, an OpenClaw adapter might use SOUL.md and HEARTBEAT.md files. A Claude Code adapter might use CLAUDE.md. A bare Python script might use command-line args.
@@ -686,3 +695,22 @@ requirements, and advisory warnings for missing or external references. New
 upstream skills require reviewed selection; removed or deselected skills remain
 installed. Editing starts with an independent copy. Write-back and PR publication
 are a later milestone; exact path and commit provenance provide their base.
+
+## Public assistant connection (opt-in)
+
+The user-authorized MCP surface connects assistants to an explicitly selected
+company as the consenting person. It exposes first-party task reads, additive
+task creation and comments, durable documents and approval links. It reuses
+existing domain authorization and scheduling; OAuth does not grant agent
+identity, native run ownership, approval decisions or third-party credentials.
+See [Public MCP](public-mcp.md) for the implemented instance-side boundary,
+configuration, plugin packages and outstanding hosted release gates. The
+[delivery plan](plans/2026-09-30-paperclip-public-mcp-and-plugins.md) separates
+external agent participation and granted third-party tools into later releases.
+
+### Experimental connection routing
+
+A virtual AI connection can rotate new task/agent allocations through an
+authorized pool while preserving session affinity. Admission, credentials and
+durable recovery remain host responsibilities; policy can be supplied by an
+opt-in plugin. See [the experimental contract](connections/AI-CONNECTION-ROUTERS.md).

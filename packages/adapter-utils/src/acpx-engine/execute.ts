@@ -50,6 +50,7 @@ import {
 } from "./terminal-session-failure.js";
 export type { AcpxTerminalSessionFailure } from "./terminal-session-failure.js";
 import type { WorkspaceRestoreFailureCode, WorkspaceRestoreOutcome } from "../workspace-restore-merge.js";
+import type { WorkspaceRestoreDiagnostic } from "../workspace-restore-diagnostics.js";
 import {
   classifyWorkspaceRestoreFailure,
   describeWorkspaceRestoreFailure,
@@ -1491,9 +1492,10 @@ function buildCodexStartupConfig(input: {
   requestedModel: string;
   requestedThinkingEffort: string;
   fastMode: boolean;
+  identityEnvironmentKeys?: string[];
 }): { value: string | null; invalidExistingConfig: boolean } {
   const hasRuntimeConfig = Boolean(
-    input.requestedModel || input.requestedThinkingEffort || input.fastMode,
+    input.requestedModel || input.requestedThinkingEffort || input.fastMode || input.identityEnvironmentKeys,
   );
   if (!hasRuntimeConfig) return { value: null, invalidExistingConfig: false };
 
@@ -1524,6 +1526,11 @@ function buildCodexStartupConfig(input: {
             },
           }
         : {}),
+      ...(input.identityEnvironmentKeys ? {
+        features: { ...parseObject(existing.features), ...(input.fastMode ? { fast_mode: true } : {}), shell_snapshot: false },
+        shell_environment_policy: { ...parseObject(existing.shell_environment_policy),
+          inherit: "all", ignore_default_excludes: true, include_only: input.identityEnvironmentKeys },
+      } : {}),
     }),
     invalidExistingConfig,
   };
@@ -1959,7 +1966,7 @@ async function buildRuntime(input: {
   await fs.mkdir(stateDir, { recursive: true });
 
   const envConfig = parseObject(config.env);
-  const env: Record<string, string> = { ...buildPaperclipEnv(agent), PAPERCLIP_RUN_ID: runId };
+  const env: Record<string, string> = { ...buildPaperclipEnv(agent, input.ctx.agentIdentity), PAPERCLIP_RUN_ID: runId };
   const wakeTaskId =
     (typeof context.taskId === "string" && context.taskId.trim()) ||
     (typeof context.issueId === "string" && context.issueId.trim()) ||
@@ -2042,6 +2049,13 @@ async function buildRuntime(input: {
   if (acpxAgent === "codex") {
     const codexStartupConfig = buildCodexStartupConfig({
       existingConfig: env.CODEX_CONFIG,
+      ...(input.ctx.agentIdentity ? { identityEnvironmentKeys: [...new Set([
+        "PATH", "HOME", "LANG", "TMPDIR", "CODEX_HOME",
+        "PAPERCLIP_AGENT_KEY_ID", "PAPERCLIP_AGENT_PUBLIC_KEY", "PAPERCLIP_AGENT_PRIVATE_KEY",
+        // Preserve Codex's default secret-name exclusions. The short-lived
+        // Paperclip API token is required by the agent skill's Bash/curl calls.
+        ...Object.keys(env).filter(key => key === "PAPERCLIP_API_KEY" || !/key|secret|token/i.test(key)),
+      ])] } : {}),
       requestedModel,
       requestedThinkingEffort,
       fastMode,
@@ -2203,6 +2217,7 @@ async function buildRuntime(input: {
   // identifiers are NOT here; they scope the outer session key only (see
   // `keyIdentity`). The fingerprint builder accepts only this identity.
   const fingerprintIdentity: SessionFingerprintIdentity = {
+    ...(input.ctx.agentIdentity ? { agentIdentityKeyId: input.ctx.agentIdentity.keyId } : {}),
     acpxAgent,
     agentCommand: agentCommand ?? acpxAgent,
     cwd: path.resolve(sessionCwd),
@@ -4078,7 +4093,7 @@ export function createAcpxEngineExecutor(deps: AcpxEngineExecutorOptions = {}) {
       // status stay exactly what the turn produced — this is a signal, not an
       // outcome change.
       let workspaceRestoreFailureField:
-        | { workspaceRestoreFailure: WorkspaceRestoreFailureCode }
+        | { workspaceRestoreFailure: WorkspaceRestoreFailureCode; workspaceRestoreDiagnostic?: WorkspaceRestoreDiagnostic }
         | Record<string, never> = {};
       // The one settlement step name whose error can be the same workspace-
       // restore failure the adapter teardown closure already classifies (a
@@ -5411,7 +5426,10 @@ export function createAcpxEngineExecutor(deps: AcpxEngineExecutorOptions = {}) {
             await withAdapterExecutionPhase(ctx, "workspace_restore", () => runRuntimeSpan("sandbox.syncBack", async () => {
               const restoreOutcome = await syncBackManagedHome(prepared);
               if (!restoreOutcome.ok) {
-                workspaceRestoreFailureField = { workspaceRestoreFailure: restoreOutcome.code };
+                workspaceRestoreFailureField = {
+                  workspaceRestoreFailure: restoreOutcome.code,
+                  ...(restoreOutcome.diagnostic ? { workspaceRestoreDiagnostic: restoreOutcome.diagnostic } : {}),
+                };
               }
             }));
           }

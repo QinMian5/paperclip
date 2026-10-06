@@ -41,6 +41,8 @@ import { sessionCodec } from "./session-codec.js";
 import { runChildProcess } from "../server-utils.js";
 import { createPromptContextFixture } from "../test-fixtures/prompt-context.js";
 import { setExpensiveWorkspaceGitExecutor } from "../git-workspace-sync.js";
+import { createWorkspaceRestoreTeardown } from "../workspace-restore-teardown.js";
+import { withWorkspaceRestoreDiagnostics, withWorkspaceRestoreStep } from "../workspace-restore-diagnostics.js";
 import { resolveReferencedSourceIgnore } from "../sandbox-managed-runtime.js";
 import {
   getActiveStepContext,
@@ -170,6 +172,7 @@ async function runExecutor(
     runtime?: Record<string, unknown>;
     executionTransport?: Record<string, unknown>;
     authToken?: string;
+    agentIdentity?: AdapterExecutionContext["agentIdentity"];
     executionTarget?: Record<string, unknown>;
     runtimeMcp?: AdapterRuntimeMcpAccess;
     prepareRemoteManagedHome?: AcpxEngineExecutorOptions["prepareRemoteManagedHome"];
@@ -208,6 +211,7 @@ async function runExecutor(
       context: options.context ?? {},
       executionTransport: options.executionTransport,
       authToken: options.authToken,
+      agentIdentity: options.agentIdentity,
       executionTarget: options.executionTarget,
       runtimeMcp: options.runtimeMcp,
       startupTraceContext: options.startupTraceContext,
@@ -544,6 +548,20 @@ describe("shared ACPX engine runtime behavior", () => {
     expect(meta[0]?.commandNotes).toContain(
       "Requested ACPX model: gpt-5.6-sol (set via CODEX_CONFIG at startup).",
     );
+  });
+
+  it("keeps identity and scoped API access without exposing configured service tokens to Codex shells", async () => {
+    const { meta } = await runExecutor({ agent: "codex", env: { MY_SERVICE_TOKEN: "assigned-tool-token" } }, {
+      authToken: "assigned-run-token",
+      agentIdentity: { keyId: "sha256:test", publicKeyPem: "public", privateKeyPem: "private" },
+    });
+    const config = JSON.parse(String((meta[0]?.env as Record<string, string>).CODEX_CONFIG));
+    expect(config.shell_environment_policy.include_only).toEqual(expect.arrayContaining([
+      "PAPERCLIP_API_KEY", "PAPERCLIP_AGENT_PRIVATE_KEY",
+    ]));
+    expect(config.shell_environment_policy.include_only).not.toContain("MY_SERVICE_TOKEN");
+    expect(JSON.stringify(config)).not.toContain("assigned-run-token");
+    expect(JSON.stringify(config)).not.toContain("assigned-tool-token");
   });
 
   it("forwards arbitrary Codex model IDs verbatim without picker-dependent session config", async () => {
@@ -3701,6 +3719,33 @@ describe("ACPX engine remote managed-home seam (PR 2: per-adapter home seed)", (
     expect(remoteAssetDir).toContain(".paperclip-runtime");
     expect(remoteAssetDir).not.toBe(managedHomeDir);
     expect(path.isAbsolute(remoteAssetDir)).toBe(true);
+  });
+
+  it("retains bounded restore diagnostics through real settlement and result reproduction", async () => {
+    const { stateDir, localCwd, executionTarget } = await setupRemoteSandbox();
+    const failure = Object.assign(new Error("private-restore-path and command"), { code: 1, stderr: "private-restore-stderr" });
+    const { result } = await runExecutor(
+      { agent: "custom", agentCommand: "node ./fake-acp.js", stateDir, cwd: localCwd },
+      {
+        authToken: "real-run-jwt", executionTarget,
+        prepareRemoteManagedHome: async (input) => {
+          const stagedRuntime = await input.stage([]);
+          return {
+            stagedRuntime,
+            teardown: createWorkspaceRestoreTeardown({
+              stagedRuntime: { restoreWorkspace: () => withWorkspaceRestoreDiagnostics("workspace", () =>
+                withWorkspaceRestoreStep("git_integration", async () => { throw failure; })) },
+              onLog: async () => {}, startMessage: "Restoring workspace", failurePrefix: "Restore failed",
+            }),
+          };
+        },
+      },
+    );
+    expect(result.resultJson).toMatchObject({
+      workspaceRestoreFailure: "restore_failed",
+      workspaceRestoreDiagnostic: { phase: "workspace", step: "git_integration", errorCode: "unknown", exitCode: 1 },
+    });
+    expect(JSON.stringify(result)).not.toContain("private-restore-");
   });
 
   it("test_remote_seam_teardown_fires_once_on_exit", async () => {
