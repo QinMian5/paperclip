@@ -671,6 +671,15 @@ Every local install keeps runtime state directly under the selected instance roo
 
 `PAPERCLIP_HOME` and `PAPERCLIP_INSTANCE_ID` override the home root and instance id respectively. `paperclipai onboard` echoes the resolved values in its banner (`Local home: <home> | instance: <id> | config: <path>`) so you can confirm where state will land before continuing.
 
+`PAPERCLIP_WORKSPACE_HOME` can place default agent workspaces and automatic
+managed project checkouts under a separate absolute root. It keeps the instance,
+company, and project path segments and leaves application data under
+`PAPERCLIP_HOME`. An unset or blank value keeps the existing defaults. Relative
+paths are rejected. The existing `~` expansion is supported.
+
+See [Local core compatibility](core-compatibility.md) for the retained assignment
+and workspace constraints, the pinned upstream comparison, and their tests.
+
 Config updates preserve unrecognized top-level and nested keys so provider or
 plugin extensions survive `configure` and worktree port repair. Likely
 misspellings of known keys produce a warning but are not removed. If an

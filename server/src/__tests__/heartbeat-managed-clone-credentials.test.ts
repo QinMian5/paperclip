@@ -12,17 +12,16 @@ import { resolveManagedProjectWorkspaceDir } from "../home-paths.ts";
 const execFile = promisify(execFileCallback);
 
 let tempHome: string;
-let originalHome: string | undefined;
 
 beforeAll(async () => {
-  originalHome = process.env.PAPERCLIP_HOME;
   tempHome = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-managed-clone-"));
-  process.env.PAPERCLIP_HOME = tempHome;
+  vi.stubEnv("PAPERCLIP_HOME", tempHome);
+  vi.stubEnv("PAPERCLIP_WORKSPACE_HOME", undefined);
+  vi.stubEnv("PAPERCLIP_INSTANCE_ID", "default");
 });
 
 afterAll(async () => {
-  if (originalHome === undefined) delete process.env.PAPERCLIP_HOME;
-  else process.env.PAPERCLIP_HOME = originalHome;
+  vi.unstubAllEnvs();
   await fs.rm(tempHome, { recursive: true, force: true });
 });
 
@@ -38,6 +37,40 @@ async function createLocalSourceRepo() {
 }
 
 describe("ensureManagedProjectWorkspace clone credentials", () => {
+  it("clones automatic project checkouts under the separate workspace home without moving app data", async () => {
+    const sourceRepo = await createLocalSourceRepo();
+    const workspaceHome = path.join(tempHome, "separate-workspaces");
+    const configPath = path.join(tempHome, "instances", "one", "config.json");
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    await fs.writeFile(configPath, '{"keep":true}');
+    vi.stubEnv("PAPERCLIP_WORKSPACE_HOME", workspaceHome);
+    try {
+      for (const [instance, companyId, projectId] of [
+        ["one", "company", "project"],
+        ["one", "other-company", "project"],
+        ["one", "company", "other-project"],
+        ["two", "company", "project"],
+      ]) {
+        vi.stubEnv("PAPERCLIP_INSTANCE_ID", instance);
+        const result = await ensureManagedProjectWorkspace({ companyId, projectId, repoUrl: sourceRepo });
+        expect(result).toEqual({
+          cwd: `${workspaceHome}/instances/${instance}/projects/${companyId}/${projectId}/_default`,
+          warning: null,
+        });
+        expect(await fs.readFile(path.join(result.cwd, "README.md"), "utf8")).toBe("hello\n");
+        expect((await execFile("git", ["remote", "get-url", "origin"], { cwd: result.cwd })).stdout.trim())
+          .toBe(sourceRepo);
+      }
+      expect(await fs.readFile(configPath, "utf8")).toBe('{"keep":true}');
+      await expect(fs.stat(path.join(tempHome, "instances", "one", "projects")))
+        .rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      vi.stubEnv("PAPERCLIP_WORKSPACE_HOME", undefined);
+      vi.stubEnv("PAPERCLIP_INSTANCE_ID", "default");
+      await fs.rm(sourceRepo, { recursive: true, force: true });
+    }
+  });
+
   it("materializes every repository-only project row inside the task workspace and reuses local edits", async () => {
     const first = await createLocalSourceRepo();
     const second = await createLocalSourceRepo();
