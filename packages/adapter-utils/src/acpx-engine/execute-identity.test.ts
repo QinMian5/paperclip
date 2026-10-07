@@ -138,7 +138,6 @@ describe("acpx identity split and launch environment", () => {
       LC_ALL: "C.UTF-8",
       HTTPS_PROXY: "https://proxy.example",
       OPENAI_API_KEY: "openai-host-secret",
-      CODEX_PATH: "/usr/local/bin/codex",
     });
     expect(projectAcpxInheritedHostEnvironment(inherited, "claude", true)).toEqual({
       PATH: "/usr/bin",
@@ -183,7 +182,6 @@ describe("acpx identity split and launch environment", () => {
     const inherited = {
       PATH: "/host/bin",
       OPENAI_API_KEY: "ambient-provider-secret",
-      CODEX_PATH: "/host/bin/codex",
       PAPERCLIP_NATIVE_MCP_TOKEN: "ambient-native-mcp-secret",
       PAPERCLIP_RUNNER_BOOTSTRAP_TICKET: "ambient-bootstrap-secret",
     };

@@ -864,7 +864,12 @@ Adding this value changes the adapter environment hash and the ACP session
 fingerprint. A saved session created without the explicit entry is incompatible,
 even when both configurations select the same executable. The next run starts
 a new session. A compatible session created with the explicit entry can resume
-after the adapter process restarts.
+after the adapter process restarts. Unchanged agent settings alone do not prove
+that the effective ACP identity stays compatible. Native managed AI connections
+create a temporary provider home for each run. Those paths can change the ACP
+environment and Skill identity even when the control plane reuses its saved task
+session. A control-plane qualification observed repeated new ACP sessions before
+and after a service restart. See the [qualification record](plans/2026-10-07-codex-acp-control-plane-continuity.md).
 
 If a deployment currently relies on a host-inheritance customization, do not
 remove it as a change that preserves existing sessions. When session continuity
@@ -873,6 +878,12 @@ that starts fresh sessions needs a separate operator decision. Validate a real
 ACP task and compare the session IDs before and after the configuration change,
 then test a process restart and resume under the unchanged explicit configuration.
 Use the existing managed credential path and keep credential values out of logs.
+
+If the operator accepts fresh Codex sessions, executable migration does not
+require a session-history migration. Persist the explicit path and verify real
+file work after a service restart. Preserve Paperclip task records and working
+files. The old provider conversation is not guaranteed to continue; a new run
+uses the task instructions, comments, and available files.
 
 ## Workspace Git Scan Protection
 
