@@ -46,13 +46,15 @@ docker compose \
 
 ## Codex 与角色规则
 
-本地部署安装 `@openai/codex@latest`，并通过 `CODEX_PATH` 让 ACP
+本地部署安装 `@openai/codex@latest`，并通过原生 Agent 配置的
+`adapterConfig.env.CODEX_PATH` 让 ACP
 桥接器启动该版本的 **app-server**。每次重新构建前刷新
 `PAPERCLIP_CLI_TOOLS_CACHE_EPOCH`，让 Docker 重新安装工具的最新发布版本。
 Agent 的执行引擎继续使用 ACP，
 模型及订阅连接沿用原配置。Runner 的远程 provider 依赖资格版本保留上游设置。
-本地 ACP 的环境变量投影允许 Codex 接收 `CODEX_PATH`；该变量不会传给
-其他 provider，也不会自动传入远程执行环境。
+六个 Codex 角色显式配置 `/usr/local/bin/codex`，容器不再提供宿主路径变量，
+源码恢复上游的环境投影。旧 Codex session 可被丢弃；任务说明、评论和工作文件
+继续保存在 Paperclip 与持久卷中，不实施模型会话历史迁移。
 
 本地部署的最终派生镜像在上游构建校验完成后，将 docker-services 中维护的
 `role-config/paperclip-SKILL.md` 覆盖到运行时的 `skills/paperclip/SKILL.md`。
@@ -69,8 +71,8 @@ Agent 的执行引擎继续使用 ACP，
 | `server/src/services/authorization.ts` | 原部署的 `role-config/prepare-runtime.py` 已补充显式禁止派工的判断；迁入源码以保留现有权限效果。 |
 | `server/src/routes/agents.ts` | 原部署同样修改了 Agent 详情的权限计算，避免界面与服务端判定不一致。 |
 | `server/src/__tests__/authorization-service.test.ts` | 验证显式禁止派工、允许派工及原有 CEO/创建 Agent 权限。 |
-| `packages/adapter-utils/src/acpx-engine/execute.ts` | 实际重试证明：宿主配置的 `CODEX_PATH` 被过滤，ACP 因此继续启动内置旧版 Codex。增加 Codex 本地继承项。 |
-| `packages/adapter-utils/src/acpx-engine/execute-identity.test.ts` | 验证路径只传给本地 Codex，其他 provider 和远程执行环境保持原边界。 |
+| `packages/adapter-utils/src/acpx-engine/execute.ts` | 已移除 Codex 宿主路径继承定制；执行路径由原生 `adapterConfig.env.CODEX_PATH` 指定。 |
+| `packages/adapter-utils/src/acpx-engine/execute-identity.test.ts` | 移除宿主路径继承的正向预期，保留环境过滤边界验证。 |
 | `Dockerfile`、`docker/orb/paperclip-SKILL.md` | 默认恢复上游 slim Node 工具配置；`PAPERCLIP_RUNTIME_BASE_IMAGE` 可选择部署工具基础镜像。角色操作指令兼容开关继续保留。Codex 安装仍使用上游原有的 `@latest`。 |
 | `.dockerignore` | 排除本地实例备份和运行文件，避免密钥、登录状态和数据进入构建上下文。 |
 | `docker-services/docker/paperclip/docker-compose.yml` | 在唯一的 Compose 文件内声明部署工具、应用及角色 Skill 三层构建，沿用现有卷、认证和网络配置。 |

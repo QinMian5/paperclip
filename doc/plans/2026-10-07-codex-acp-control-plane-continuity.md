@@ -1,9 +1,54 @@
 # Codex ACP continuity through the native control plane
 
-Date: 2026-10-07. Result: executable selection passed; session continuity failed.
-The deployment was restored to its previous image and settings.
+Date: 2026-10-07. Earlier result: executable selection passed; session continuity
+failed. That rollout was restored to its previous image and settings.
 
-## Acceptance boundary
+This record describes the earlier requirement to retain the same ACP session.
+The operator later accepted fresh Codex sessions, including after subsequent
+wakes and service restarts. That decision removes session continuity as an
+executable-migration gate. The shared session identity/history repair is not
+part of the migration. The historical results below remain unchanged.
+
+## Accepted fresh-session rollout
+
+The later rollout passed the simplified requirement. Another deployment had
+updated the live image to `6e6bd18c7a2bcd4c750228e036aa454c3c11993145c0d69813ad8664af60e282`
+and Codex `0.161.0`. The migration preserved that latest image and replaced only
+the execution module. The resulting image is
+`f00665c16c2b1de9387f8566339a259f272c47aa47cb0bec94a2856562b1826b`.
+Its module hash is the same controlled candidate `54cd57a1...45fb5` below.
+
+All six native Codex path bindings persisted across the service recreation at
+19:55:26 UTC. All eight roles retained their other protected configuration.
+The actual child used `/usr/local/bin/codex` as `app-server` with the existing
+managed subscription. The host path variable was absent. Container mounts,
+environment except that path, network, limits, restart policy, and logging
+matched the latest baseline.
+
+A real post-recreation task read the existing 26-byte file and appended only
+`simple` plus a line break. It returned a fresh Codex session and succeeded.
+The independently checked file was exactly 33 bytes:
+
+```text
+baseline
+explicit
+resumed
+simple
+```
+
+The existing bwrap namespace restriction remained. The file task used the same
+permitted shell escalation as earlier phases. No role permission change was
+made. Paperclip task records and prior comments remained available.
+The source now removes one host allowlist entry and two obsolete test lines.
+The shared session fingerprint and provider-history code is unchanged.
+Repeated fresh provider sessions remain accepted behavior.
+
+The repeated focused check passed 219 tests in 30.17 seconds, and both adapter
+typechecks passed. The exact candidate source/test change had already completed
+the full test command described below; its failures remain reported. The full
+checks are not green, and this rollout does not claim a full release acceptance.
+
+## Earlier acceptance boundary
 
 The operator accepted one new session when moving the executable path from the
 host environment into `adapterConfig.env.CODEX_PATH`. Later runs with unchanged
@@ -151,5 +196,5 @@ It does not approve the migration or remove the host-inheritance patch.
   `editStateKey` is missing. These errors were reproduced on the earlier clean
   baseline and the affected source is unchanged.
 
-The full checks do not pass. Focused test success and file task success do not
-override the failed real session-continuity requirement.
+The full checks do not pass. Under the earlier requirement, focused test success
+and file task success did not override the failed session-continuity check.

@@ -879,6 +879,12 @@ ACP task and compare the session IDs before and after the configuration change,
 then test a process restart and resume under the unchanged explicit configuration.
 Use the existing managed credential path and keep credential values out of logs.
 
+If the operator accepts fresh Codex sessions, executable migration does not
+require a session-history migration. Persist the explicit path and verify real
+file work after a service restart. Preserve Paperclip task records and working
+files. The old provider conversation is not guaranteed to continue; a new run
+uses the task instructions, comments, and available files.
+
 ## Workspace Git Scan Protection
 
 Paperclip applies one process-wide scheduler to expensive host-side workspace Git enumeration, including changed-file browsing, runtime/finalization cleanliness guards, and adapter sandbox-sync snapshots. The scheduler defaults to two active scans and a bounded queue of 32. Identical buffered scans of the same canonical worktree share one subprocess, while successful changed-file listings are cached for 10 seconds. Streaming snapshot scans have caller-owned sinks, so they use separate jobs in the same queue and are never cached or coalesced. Correctness-sensitive runtime guards bypass the result cache.
