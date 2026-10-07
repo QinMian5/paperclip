@@ -2186,6 +2186,13 @@ export function authorizationService(db: Db | DbTransaction) {
     }
 
     if (input.action === "tasks:assign") {
+      if (actorAgent.role !== "ceo" && !canCreateAgentsLegacy(actorAgent) && actorAgent.permissions?.canAssignTasks === false) {
+        return deny({
+          action: input.action,
+          reason: "deny_missing_grant",
+          explanation: "Task assignment is explicitly disabled for this agent.",
+        });
+      }
       if (!isSimpleAssignableAgentStatus(actorAgent.status)) {
         return deny({
           action: input.action,

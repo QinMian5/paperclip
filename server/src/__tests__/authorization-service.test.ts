@@ -2733,4 +2733,45 @@ describeEmbeddedPostgres("authorization service", () => {
         .resolves.toMatchObject({ allowed: false, reason: "deny_scope" });
     }
   });
+
+  it.each([
+    { role: "engineer", permissions: {}, grant: "none", allowed: true },
+    { role: "engineer", permissions: { canAssignTasks: false }, grant: "none", allowed: false },
+    { role: "engineer", permissions: { canAssignTasks: false }, grant: "broad", allowed: false },
+    { role: "engineer", permissions: { canAssignTasks: false }, grant: "scoped", allowed: false },
+    { role: "engineer", permissions: { canAssignTasks: true }, grant: "none", allowed: true },
+    { role: "engineer", permissions: { canAssignTasks: true }, grant: "broad", allowed: true },
+    { role: "ceo", permissions: { canAssignTasks: false }, grant: "none", allowed: true },
+    { role: "engineer", permissions: { canAssignTasks: false, canCreateAgents: true }, grant: "none", allowed: true },
+  ])("honors explicit assignment permissions while preserving CEO and creator authority: $role $permissions $grant", async ({ role, permissions, grant, allowed }) => {
+    const company = await createCompany(db, "ExplicitAssignmentPermission");
+    const actorAgent = await createAgent(db, company.id, { role, permissions });
+    const targetAgent = await createAgent(db, company.id);
+    if (grant === "none") {
+      await db.insert(companyMemberships).values({
+        companyId: company.id,
+        principalType: "agent",
+        principalId: actorAgent.id,
+        status: "active",
+        membershipRole: "member",
+      });
+    } else {
+      await grantAgentPermission(
+        db, company.id, actorAgent.id,
+        grant === "scoped" ? "tasks:assign_scope" : "tasks:assign",
+        grant === "scoped" ? { assigneeAgentIds: [targetAgent.id] } : null,
+      );
+    }
+
+    const decision = await authorizationService(db).decide({
+      actor: { type: "agent", agentId: actorAgent.id, companyId: company.id, source: "agent_key" },
+      action: "tasks:assign",
+      resource: { type: "issue", companyId: company.id, assigneeAgentId: targetAgent.id },
+      scope: { assigneeAgentId: targetAgent.id },
+    });
+
+    expect(decision.allowed).toBe(allowed);
+    if (!allowed) expect(decision.reason).toBe("deny_missing_grant");
+  });
+
 });
