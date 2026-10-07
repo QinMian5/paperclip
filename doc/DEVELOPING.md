@@ -737,6 +737,9 @@ checkouts must be moved with their Git worktrees intact, with compatibility
 paths retained for saved sessions. Project-specific bootstrap and runtime
 commands still belong to each project's configuration.
 
+See [Local core compatibility](core-compatibility.md) for the retained workspace
+and assignment constraints, the pinned upstream comparison, and their tests.
+
 Config updates preserve unrecognized top-level and nested keys so provider or
 plugin extensions survive `configure` and worktree port repair. Likely
 misspellings of known keys produce a warning but are not removed. If an

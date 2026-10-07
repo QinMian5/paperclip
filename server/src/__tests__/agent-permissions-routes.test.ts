@@ -1954,8 +1954,17 @@ describe("agent permission routes", () => {
     expect(res.body.access.taskAssignSource).toBe("explicit_grant");
   }, 15_000);
 
-  it("reports simple-mode task assignment as enabled for active company agent members", async () => {
-    mockAccessService.listPrincipalGrants.mockResolvedValue([]);
+  it.each([
+    { role: "engineer", permissions: {}, grant: false, allowed: true, source: "simple_default" },
+    { role: "engineer", permissions: { canAssignTasks: false }, grant: false, allowed: false, source: "none" },
+    { role: "engineer", permissions: { canAssignTasks: false }, grant: true, allowed: false, source: "none" },
+    { role: "engineer", permissions: { canAssignTasks: true }, grant: false, allowed: true, source: "simple_default" },
+    { role: "engineer", permissions: { canAssignTasks: true }, grant: true, allowed: true, source: "explicit_grant" },
+    { role: "ceo", permissions: { canAssignTasks: false }, grant: false, allowed: true, source: "ceo_role" },
+    { role: "engineer", permissions: { canAssignTasks: false, canCreateAgents: true }, grant: false, allowed: true, source: "agent_creator" },
+  ])("reports assignment capability consistent with enforcement: $role $permissions $grant", async ({ role, permissions, grant, allowed, source }) => {
+    mockAgentService.getById.mockResolvedValue({ ...baseAgent, role, permissions });
+    mockAccessService.listPrincipalGrants.mockResolvedValue(grant ? [{ permissionKey: "tasks:assign" }] : []);
 
     const app = await createApp({
       type: "board",
@@ -1968,8 +1977,7 @@ describe("agent permission routes", () => {
     const res = await requestApp(app, (baseUrl) => request(baseUrl).get(`/api/agents/${agentId}`));
 
     expect(res.status).toBe(200);
-    expect(res.body.access.canAssignTasks).toBe(true);
-    expect(res.body.access.taskAssignSource).toBe("simple_default");
+    expect(res.body.access).toMatchObject({ canAssignTasks: allowed, taskAssignSource: source });
   }, 15_000);
 
   it("keeps task assignment enabled when agent creation privilege is enabled", async () => {

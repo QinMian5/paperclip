@@ -557,15 +557,33 @@ describeEmbeddedPostgres("authorization service", () => {
   });
 
   it.each([
-    { role: "engineer", permissions: { canAssignTasks: false }, allowed: false },
-    { role: "engineer", permissions: { canAssignTasks: true }, allowed: true },
-    { role: "ceo", permissions: { canAssignTasks: false }, allowed: true },
-    { role: "engineer", permissions: { canAssignTasks: false, canCreateAgents: true }, allowed: true },
-  ])("honors explicit assignment permissions while preserving CEO and creator authority: $role $permissions", async ({ role, permissions, allowed }) => {
+    { role: "engineer", permissions: {}, grant: "none", allowed: true },
+    { role: "engineer", permissions: { canAssignTasks: false }, grant: "none", allowed: false },
+    { role: "engineer", permissions: { canAssignTasks: false }, grant: "broad", allowed: false },
+    { role: "engineer", permissions: { canAssignTasks: false }, grant: "scoped", allowed: false },
+    { role: "engineer", permissions: { canAssignTasks: true }, grant: "none", allowed: true },
+    { role: "engineer", permissions: { canAssignTasks: true }, grant: "broad", allowed: true },
+    { role: "ceo", permissions: { canAssignTasks: false }, grant: "none", allowed: true },
+    { role: "engineer", permissions: { canAssignTasks: false, canCreateAgents: true }, grant: "none", allowed: true },
+  ])("honors explicit assignment permissions while preserving CEO and creator authority: $role $permissions $grant", async ({ role, permissions, grant, allowed }) => {
     const company = await createCompany(db, "ExplicitAssignmentPermission");
     const actorAgent = await createAgent(db, company.id, { role, permissions });
     const targetAgent = await createAgent(db, company.id);
-    await grantAgentPermission(db, company.id, actorAgent.id, "tasks:assign");
+    if (grant === "none") {
+      await db.insert(companyMemberships).values({
+        companyId: company.id,
+        principalType: "agent",
+        principalId: actorAgent.id,
+        status: "active",
+        membershipRole: "member",
+      });
+    } else {
+      await grantAgentPermission(
+        db, company.id, actorAgent.id,
+        grant === "scoped" ? "tasks:assign_scope" : "tasks:assign",
+        grant === "scoped" ? { assigneeAgentIds: [targetAgent.id] } : null,
+      );
+    }
 
     const decision = await authorizationService(db).decide({
       actor: { type: "agent", agentId: actorAgent.id, companyId: company.id, source: "agent_key" },
