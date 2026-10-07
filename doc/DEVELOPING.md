@@ -772,6 +772,39 @@ Agent, project, environment, secret, skill, and workspace config edits are sampl
 
 When effective run config changes, Paperclip may intentionally skip a saved adapter session, refresh persisted workspace runtime config, replace a reused execution workspace, or avoid reusing a sandbox/environment lease. Fresh execution can lose adapter-specific session, workspace, or sandbox state; correctness of the next run's config takes priority over continuity. Plain environment values affect freshness through value hashes; run result JSON and workspace operation logs expose only the non-sensitive freshness decision categories, without storing secret values, full env maps, provider credentials, or private path details.
 
+### Codex ACP executable configuration
+
+The Codex ACP bridge can select its Codex executable through an explicit
+adapter environment value:
+
+```json
+{
+  "env": {
+    "CODEX_PATH": "/usr/local/bin/codex"
+  }
+}
+```
+
+Merge this entry into the existing `adapterConfig.env`. The shared ACP engine
+merges explicit adapter values after its host environment projection. The
+bridge uses the selected executable to start `app-server`; a successful CLI
+version check alone does not verify ACP execution. Keep the existing engine,
+model, authentication binding, and permission settings when testing this change.
+
+Adding this value changes the adapter environment hash and the ACP session
+fingerprint. A saved session created without the explicit entry is incompatible,
+even when both configurations select the same executable. The next run starts
+a new session. A compatible session created with the explicit entry can resume
+after the adapter process restarts.
+
+If a deployment currently relies on a host-inheritance customization, do not
+remove it as a change that preserves existing sessions. When session continuity
+is required, retain the current configuration and customization. A migration
+that starts fresh sessions needs a separate operator decision. Validate a real
+ACP task and compare the session IDs before and after the configuration change,
+then test a process restart and resume under the unchanged explicit configuration.
+Use the existing managed credential path and keep credential values out of logs.
+
 ## Workspace Git Scan Protection
 
 Paperclip applies one process-wide scheduler to expensive host-side workspace Git enumeration, including changed-file browsing, runtime/finalization cleanliness guards, and adapter sandbox-sync snapshots. The scheduler defaults to two active scans and a bounded queue of 32. Identical buffered scans of the same canonical worktree share one subprocess, while successful changed-file listings are cached for 10 seconds. Streaming snapshot scans have caller-owned sinks, so they use separate jobs in the same queue and are never cached or coalesced. Correctness-sensitive runtime guards bypass the result cache.
