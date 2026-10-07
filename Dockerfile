@@ -1,12 +1,11 @@
 # syntax=docker/dockerfile:1.20
-FROM mcr.microsoft.com/devcontainers/javascript-node:24-trixie AS base
-ENV PATH="/usr/local/bin:${PATH}"
+ARG PAPERCLIP_RUNTIME_BASE_IMAGE=base
+FROM node:24-trixie-slim AS base
 ARG USER_UID=1000
 ARG USER_GID=1000
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates gosu curl gh git wget ripgrep python3 tini \
   && rm -rf /var/lib/apt/lists/* \
-  && rm -f /etc/sudoers.d/node \
   && corepack enable
 
 # Modify the existing node user/group to have the specified UID/GID to match host user
@@ -161,7 +160,8 @@ RUN mkdir -p /provider-pack \
     echo "Skipping remote provider pack: supply a full PAPERCLIP_BUILD_COMMIT to enable remote OpenCode/ACPX execution"; \
   fi
 
-FROM base AS production
+# Deployments can provide runtime tools without changing the application build.
+FROM ${PAPERCLIP_RUNTIME_BASE_IMAGE} AS production
 ARG USER_UID=1000
 ARG USER_GID=1000
 # Refreshes the tool layer below when it changes (CI stamps an ISO week, so
@@ -174,21 +174,12 @@ WORKDIR /app
 # (the single most expensive layer: four CLI toolchains + apt, per arch) can
 # never hit the layer cache and rebuilds on every build.
 RUN echo "cli-tools-epoch: ${CLI_TOOLS_CACHE_EPOCH}" \
-  && corepack disable pnpm \
-  && npm uninstall --global --prefix /usr/local/share/npm-global pnpm \
-  && npm install --global --prefix /usr/local --omit=dev pnpm@latest @anthropic-ai/claude-code@latest @openai/codex@latest opencode-ai @google/gemini-cli@latest @moonshot-ai/kimi-code@latest \
+  && npm install --global --omit=dev @anthropic-ai/claude-code@latest @openai/codex@latest opencode-ai @google/gemini-cli@latest @moonshot-ai/kimi-code@latest \
   && apt-get update \
-  && apt-get install -y --no-install-recommends openssh-client jq unzip \
+  && apt-get install -y --no-install-recommends openssh-client jq \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /paperclip \
   && chown node:node /paperclip
-
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
-
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
-    cmake ninja-build dnsutils netcat-openbsd sqlite3 ffmpeg \
-  && rm -rf /var/lib/apt/lists/*
 
 COPY scripts/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
