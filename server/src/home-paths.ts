@@ -47,12 +47,22 @@ export function resolveDefaultBackupDir(): string {
   return resolveSharedDefaultBackupDir();
 }
 
+function resolveWorkspaceInstanceRoot(): string {
+  const workspaceHome = process.env.PAPERCLIP_WORKSPACE_HOME?.trim();
+  if (!workspaceHome) return resolvePaperclipInstanceRoot();
+  const expanded = expandHomePrefix(workspaceHome);
+  if (!path.isAbsolute(expanded)) {
+    throw new Error("PAPERCLIP_WORKSPACE_HOME must be an absolute path.");
+  }
+  return resolvePaperclipInstanceRoot({ homeDir: expanded });
+}
+
 export function resolveDefaultAgentWorkspaceDir(agentId: string): string {
   const trimmed = agentId.trim();
   if (!PATH_SEGMENT_RE.test(trimmed)) {
     throw new Error(`Invalid agent id for workspace path '${agentId}'.`);
   }
-  return path.resolve(resolvePaperclipInstanceRoot(), "workspaces", trimmed);
+  return path.resolve(resolveWorkspaceInstanceRoot(), "workspaces", trimmed);
 }
 
 function sanitizeFriendlyPathSegment(value: string | null | undefined, fallback = "_default"): string {
@@ -66,7 +76,8 @@ function sanitizeFriendlyPathSegment(value: string | null | undefined, fallback 
 
 /**
  * Resolve the managed checkout directory for one project:
- * `<instanceRoot>/projects/<companyId>/<projectId>/<repoName|_default>`.
+ * `<workspaceInstanceRoot>/projects/<companyId>/<projectId>/<repoName|_default>`.
+ * PAPERCLIP_WORKSPACE_HOME can relocate checkouts without relocating instance data.
  *
  * Per-project directory isolation invariant: the `projectId` is a distinct path segment, so two
  * different projects always resolve to sibling directories under `<companyId>/`. One project's
@@ -85,7 +96,7 @@ export function resolveManagedProjectWorkspaceDir(input: {
     throw new Error("Managed project workspace path requires companyId and projectId.");
   }
   return path.resolve(
-    resolvePaperclipInstanceRoot(),
+    resolveWorkspaceInstanceRoot(),
     "projects",
     sanitizeFriendlyPathSegment(companyId, "company"),
     sanitizeFriendlyPathSegment(projectId, "project"),

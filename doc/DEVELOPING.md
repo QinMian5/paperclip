@@ -726,6 +726,17 @@ Every local install keeps runtime state directly under the selected instance roo
 
 `PAPERCLIP_HOME` and `PAPERCLIP_INSTANCE_ID` override the home root and instance id respectively. `paperclipai onboard` echoes the resolved values in its banner (`Local home: <home> | instance: <id> | config: <path>`) so you can confirm where state will land before continuing.
 
+`PAPERCLIP_WORKSPACE_HOME` optionally relocates managed project checkouts and
+default agent workspaces to `<workspace-home>/instances/<instance-id>/projects`
+and `workspaces`. Use an absolute path (or `~/...`). Database, secrets, uploads
+and other instance data continue to use `PAPERCLIP_HOME`. Explicit workspace
+paths and saved sessions are not rewritten. When connecting a container to a
+host Docker engine, bind mount this workspace home at the same absolute path
+on both sides; Docker resolves source mounts on the daemon host. Existing
+checkouts must be moved with their Git worktrees intact, with compatibility
+paths retained for saved sessions. Project-specific bootstrap and runtime
+commands still belong to each project's configuration.
+
 Config updates preserve unrecognized top-level and nested keys so provider or
 plugin extensions survive `configure` and worktree port repair. Likely
 misspellings of known keys produce a warning but are not removed. If an
